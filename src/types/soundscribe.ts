@@ -10,6 +10,16 @@ export type NavSection =
 
 export type BackendMode = 'supabase' | 'local';
 
+export type AnalysisMode = 'auto' | 'humming' | 'voice';
+
+export type RecordingContentType =
+  | 'humming'
+  | 'singing'
+  | 'speech'
+  | 'instrumental'
+  | 'mixed'
+  | 'unknown';
+
 export interface AudioPreferences {
   preferredInputId?: string;
   defaultFormat: string;
@@ -63,18 +73,36 @@ export interface Recording {
   updated_at?: string;
 }
 
+export interface MelodyAnalysis {
+  detected: boolean;
+  contour: string;
+  pitch_observations: string[];
+  estimated_key: string | null;
+  confidence: number | null;
+}
+
+export interface RhythmAnalysis {
+  detected: boolean;
+  estimated_bpm: number | null;
+  pattern: string;
+  confidence: number | null;
+}
+
 export interface StructuredAudioAnalysis {
+  recording_type: RecordingContentType;
+  analysis_mode?: AnalysisMode;
   audio_summary: string;
   transcription: string;
   lyrics: string;
+  melody: MelodyAnalysis;
+  rhythm: RhythmAnalysis;
   mood: string[];
   possible_genres: string[];
   possible_instruments: string[];
-  estimated_tempo: string | null;
-  rhythm_description: string;
+  vocal_characteristics: string[];
   musical_characteristics: string[];
   creative_recommendations: string[];
-  confidence_notes: string[];
+  limitations: string[];
 }
 
 export interface Analysis {

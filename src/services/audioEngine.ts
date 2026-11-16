@@ -111,17 +111,32 @@ export function validateAudioFile(file: File): { valid: boolean; error?: string;
   return { valid: true, mimeType: resolvedMime };
 }
 
-export async function extractAudioDuration(blob: Blob): Promise<number> {
-  // Primary: Web Audio API decodeAudioData for exact sample duration
+export interface AudioProbeResult {
+  duration: number;
+  peakAmplitude: number | null;
+}
+
+export async function probeAudioBlob(blob: Blob): Promise<AudioProbeResult> {
+  // Primary: Web Audio API decodeAudioData for exact sample duration and peak amplitude
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (AudioCtx) {
       const ctx = new AudioCtx();
       try {
         const buffer = await blob.arrayBuffer();
         const decoded = await ctx.decodeAudioData(buffer.slice(0));
+        let peak = 0;
+        for (let ch = 0; ch < decoded.numberOfChannels; ch++) {
+          const data = decoded.getChannelData(ch);
+          for (let i = 0; i < data.length; i += 4) {
+            const abs = Math.abs(data[i]);
+            if (abs > peak) peak = abs;
+          }
+        }
         if (Number.isFinite(decoded.duration) && decoded.duration > 0) {
-          return decoded.duration;
+          return { duration: decoded.duration, peakAmplitude: peak };
         }
       } finally {
         await ctx.close().catch(() => undefined);
@@ -132,7 +147,7 @@ export async function extractAudioDuration(blob: Blob): Promise<number> {
   }
 
   // Fallback: HTMLAudioElement metadata probing
-  return new Promise<number>((resolve) => {
+  const duration = await new Promise<number>((resolve) => {
     const url = URL.createObjectURL(blob);
     const audio = new Audio();
     const cleanup = () => {
@@ -160,6 +175,28 @@ export async function extractAudioDuration(blob: Blob): Promise<number> {
     };
     audio.src = url;
   });
+
+  return { duration, peakAmplitude: null };
+}
+
+export async function extractAudioDuration(blob: Blob): Promise<number> {
+  const probed = await probeAudioBlob(blob);
+  return probed.duration;
+}
+
+export function validateAudioBlobForAnalysis(blob: Blob, mimeType?: string): void {
+  if (!blob || blob.size < 256) {
+    throw new Error('Audio recording is empty or incomplete (fewer than 256 bytes).');
+  }
+  if (blob.size > MAX_UPLOAD_SIZE_BYTES) {
+    throw new Error(
+      `Audio file is ${(blob.size / (1024 * 1024)).toFixed(1)} MB, exceeding the 50 MB limit.`
+    );
+  }
+  const effectiveMime = (blob.type || mimeType || '').split(';')[0].trim().toLowerCase();
+  if (effectiveMime && !effectiveMime.startsWith('audio/') && effectiveMime !== 'video/webm') {
+    throw new Error(`Unsupported MIME type "${effectiveMime}" for audio analysis.`);
+  }
 }
 
 export async function listAudioInputDevices(): Promise<AudioDeviceOption[]> {
@@ -297,8 +334,21 @@ export class MicrophoneRecorder {
     this.cleanupStream();
     this.state = 'stopped';
 
-    const decodedDuration = await extractAudioDuration(blob);
-    const duration = decodedDuration > 0.1 ? decodedDuration : rawDuration;
+    if (!blob || blob.size < 256) {
+      throw new Error('No audio data was captured. Check that your microphone is connected and recording.');
+    }
+
+    const probed = await probeAudioBlob(blob);
+    const duration = probed.duration > 0.1 ? probed.duration : rawDuration;
+
+    if (duration < 0.25) {
+      throw new Error('Recording was too short (< 0.25s). Please record a slightly longer musical phrase.');
+    }
+
+    if (probed.peakAmplitude !== null && probed.peakAmplitude < 0.001) {
+      throw new Error('Captured audio is completely silent. Ensure your microphone is unmuted and try again.');
+    }
+
     const url = URL.createObjectURL(blob);
 
     return {

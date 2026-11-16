@@ -4,12 +4,15 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
+import { processAndValidateAudio } from './server/audioProcessor.ts';
 import {
   analyzeRecordingWithGemini,
   assistLyricsWithGemini,
   chatMusicAssistantWithGemini,
   developIdeaWithGemini,
+  GeminiServiceError,
 } from './server/geminiService.ts';
+import type { AnalysisMode } from './src/types/soundscribe.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -19,7 +22,7 @@ app.use(express.json({ limit: '10mb' }));
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 26 * 1024 * 1024, // 26MB buffer ceiling to gracefully report >25MB audio limit
+    fileSize: 50 * 1024 * 1024, // 50 MB upload cap; audioProcessor validates & normalizes to <25 MB for Gemini
   },
 });
 
@@ -50,6 +53,35 @@ async function verifyOptionalSupabaseToken(req: Request, res: Response, next: Ne
   }
 }
 
+function resolveHttpErrorStatus(error: unknown): { status: number; message: string } {
+  if (error instanceof GeminiServiceError) {
+    return { status: error.status, message: error.message };
+  }
+  const message =
+    error instanceof Error ? error.message : 'Failed to process request.';
+
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('empty') ||
+    lower.includes('too short') ||
+    lower.includes('silent') ||
+    lower.includes('unrecognized') ||
+    lower.includes('corrupted') ||
+    lower.includes('unsupported') ||
+    lower.includes('no playable audio') ||
+    lower.includes('zero samples') ||
+    lower.includes('ffmpeg') ||
+    lower.includes('exceeding') ||
+    lower.includes('exceeds')
+  ) {
+    return { status: 400, message };
+  }
+  if (lower.includes('gemini_api_key')) {
+    return { status: 503, message };
+  }
+  return { status: 500, message };
+}
+
 app.get('/api/health', (_req: Request, res: Response) => {
   res.json({
     ok: true,
@@ -65,37 +97,76 @@ app.post(
   verifyOptionalSupabaseToken,
   upload.single('audio'),
   async (req: Request, res: Response) => {
+    const isStreaming =
+      req.query.stream === '1' ||
+      req.headers.accept?.includes('application/x-ndjson') ||
+      false;
+
+    const emitStage = (stage: string, detail: string) => {
+      if (!isStreaming || res.writableEnded) return;
+      res.write(`${JSON.stringify({ type: 'stage', stage, detail })}\n`);
+    };
+
     try {
       const file = req.file;
       if (!file) {
         return res.status(400).json({ error: 'No audio file was provided for analysis.' });
       }
 
-      const { title, notes, duration, mimeType } = req.body as {
+      const { title, notes, mimeType, analysisMode } = req.body as {
         title?: string;
         notes?: string;
         duration?: string;
         mimeType?: string;
+        analysisMode?: string;
       };
 
+      const resolvedMode: AnalysisMode =
+        analysisMode === 'humming' || analysisMode === 'voice' ? analysisMode : 'auto';
+
+      if (isStreaming) {
+        res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders?.();
+      }
+
+      emitStage(
+        'validating',
+        `Inspecting ${(file.size / 1024).toFixed(0)} KB audio signature & stream headers...`
+      );
+
+      emitStage(
+        'processing',
+        'Decoding & normalizing audio waveform and extracting acoustic telemetry...'
+      );
+
+      const processedAudio = await processAndValidateAudio({
+        buffer: file.buffer,
+        declaredMimeType: mimeType || file.mimetype || 'audio/webm',
+        originalName: file.originalname,
+      });
+
       const analysis = await analyzeRecordingWithGemini({
-        audioBuffer: file.buffer,
-        mimeType: mimeType || file.mimetype || 'audio/webm',
+        processedAudio,
+        analysisMode: resolvedMode,
         title,
         notes,
-        duration: duration ? Number(duration) : undefined,
+        onStage: (stage, detail) => emitStage(stage, detail),
       });
+
+      if (isStreaming) {
+        res.write(`${JSON.stringify({ type: 'result', analysis })}\n`);
+        return res.end();
+      }
 
       return res.json({ analysis });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to analyze recording with Gemini.';
-      const status =
-        message.includes('Unsupported audio') || message.includes('exceeds')
-          ? 400
-          : message.includes('GEMINI_API_KEY')
-            ? 503
-            : 500;
+      const { status, message } = resolveHttpErrorStatus(error);
+      if (isStreaming && res.headersSent) {
+        res.write(`${JSON.stringify({ type: 'error', status, error: message })}\n`);
+        return res.end();
+      }
       return res.status(status).json({ error: message });
     }
   }
@@ -139,9 +210,28 @@ app.post(
         }
       };
 
+      let normalizedBuffer: Buffer | undefined;
+      let normalizedMime: string | undefined;
+
+      if (file) {
+        try {
+          const processed = await processAndValidateAudio({
+            buffer: file.buffer,
+            declaredMimeType: body.mimeType || file.mimetype,
+            originalName: file.originalname,
+          });
+          normalizedBuffer = processed.geminiBuffer;
+          normalizedMime = processed.geminiMimeType;
+        } catch {
+          // If audio normalization fails on develop-idea, continue using transcript/notes context rather than failing composition planning
+          normalizedBuffer = undefined;
+          normalizedMime = undefined;
+        }
+      }
+
       const plan = await developIdeaWithGemini({
-        audioBuffer: file?.buffer,
-        mimeType: body.mimeType || file?.mimetype,
+        audioBuffer: normalizedBuffer,
+        mimeType: normalizedMime,
         title: body.title || 'Untitled Musical Idea',
         notes: body.notes,
         transcript: body.transcript,
@@ -154,9 +244,8 @@ app.post(
 
       return res.json({ plan });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to develop composition idea.';
-      return res.status(500).json({ error: message });
+      const { status, message } = resolveHttpErrorStatus(error);
+      return res.status(status).json({ error: message });
     }
   }
 );
@@ -192,9 +281,8 @@ app.post(
 
       return res.json(result);
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to generate lyric suggestions.';
-      return res.status(500).json({ error: message });
+      const { status, message } = resolveHttpErrorStatus(error);
+      return res.status(status).json({ error: message });
     }
   }
 );
@@ -220,9 +308,8 @@ app.post(
 
       return res.json({ reply });
     } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'AI Music Assistant failed to respond.';
-      return res.status(500).json({ error: message });
+      const { status, message } = resolveHttpErrorStatus(error);
+      return res.status(status).json({ error: message });
     }
   }
 );
@@ -232,7 +319,7 @@ app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
-        error: 'Uploaded audio exceeds the 25 MB limit for server-side AI audio analysis.',
+        error: 'Uploaded audio exceeds the 50 MB limit.',
       });
     }
     return res.status(400).json({ error: err.message });

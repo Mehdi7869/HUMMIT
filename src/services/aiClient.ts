@@ -1,6 +1,21 @@
-import { StructuredAudioAnalysis } from '../types/soundscribe';
+import { AnalysisMode, StructuredAudioAnalysis } from '../types/soundscribe';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
-import { getExtensionFromMimeType } from './audioEngine';
+import { getExtensionFromMimeType, validateAudioBlobForAnalysis } from './audioEngine';
+
+export type AnalysisPipelineStage =
+  | 'uploading'
+  | 'validating'
+  | 'processing'
+  | 'analyzing'
+  | 'extracting'
+  | 'saving';
+
+export interface AnalysisProgressUpdate {
+  stage: AnalysisPipelineStage;
+  detail: string;
+  uploadedBytes?: number;
+  totalBytes?: number;
+}
 
 async function getAuthHeader(): Promise<Record<string, string>> {
   if (isSupabaseConfigured) {
@@ -31,30 +46,148 @@ export async function checkServerHealth(): Promise<{
 export async function requestAudioAnalysis(params: {
   audioBlob: Blob;
   mimeType: string;
+  analysisMode?: AnalysisMode;
   title?: string;
   notes?: string;
   duration?: number;
+  onProgress?: (update: AnalysisProgressUpdate) => void;
 }): Promise<StructuredAudioAnalysis> {
+  validateAudioBlobForAnalysis(params.audioBlob, params.mimeType);
+
   const form = new FormData();
-  const ext = getExtensionFromMimeType(params.mimeType);
+  const effectiveMime = params.audioBlob.type || params.mimeType || 'audio/webm';
+  const ext = getExtensionFromMimeType(effectiveMime);
   form.append('audio', params.audioBlob, `recording.${ext}`);
-  form.append('mimeType', params.mimeType);
+  form.append('mimeType', effectiveMime);
+  form.append('analysisMode', params.analysisMode || 'auto');
   if (params.title) form.append('title', params.title);
   if (params.notes) form.append('notes', params.notes);
   if (typeof params.duration === 'number') form.append('duration', String(params.duration));
 
   const headers = await getAuthHeader();
-  const res = await fetch('/api/ai/analyze-recording', {
-    method: 'POST',
-    headers,
-    body: form,
+
+  params.onProgress?.({
+    stage: 'uploading',
+    detail: `Preparing ${(params.audioBlob.size / 1024).toFixed(0)} KB audio upload...`,
+    uploadedBytes: 0,
+    totalBytes: params.audioBlob.size,
   });
 
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(payload.error || `Audio analysis failed (${res.status}).`);
-  }
-  return payload.analysis as StructuredAudioAnalysis;
+  return new Promise<StructuredAudioAnalysis>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/ai/analyze-recording?stream=1', true);
+    xhr.timeout = 95000;
+
+    for (const [key, val] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, val);
+    }
+
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && ev.total > 0) {
+        const kbDone = (ev.loaded / 1024).toFixed(0);
+        const kbTotal = (ev.total / 1024).toFixed(0);
+        params.onProgress?.({
+          stage: 'uploading',
+          detail:
+            ev.loaded >= ev.total
+              ? `Uploaded ${kbTotal} KB. Handing off to validation...`
+              : `Uploading audio (${kbDone} KB / ${kbTotal} KB)...`,
+          uploadedBytes: ev.loaded,
+          totalBytes: ev.total,
+        });
+      }
+    };
+
+    let processedLen = 0;
+    let bufferRemainder = '';
+    let resolvedResult: StructuredAudioAnalysis | null = null;
+    let streamError: string | null = null;
+
+    const parseNdjsonLines = (chunkText: string, flush = false) => {
+      bufferRemainder += chunkText;
+      const lines = bufferRemainder.split('\n');
+      bufferRemainder = flush ? '' : lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const event = JSON.parse(trimmed) as {
+            type?: string;
+            stage?: AnalysisPipelineStage;
+            detail?: string;
+            analysis?: StructuredAudioAnalysis;
+            error?: string;
+          };
+          if (event.type === 'stage' && event.stage) {
+            params.onProgress?.({
+              stage: event.stage,
+              detail: event.detail || '',
+            });
+          } else if (event.type === 'result' && event.analysis) {
+            resolvedResult = event.analysis;
+          } else if (event.type === 'error' && event.error) {
+            streamError = event.error;
+          }
+        } catch {
+          // Ignore partial or non-JSON line
+        }
+      }
+    };
+
+    xhr.onprogress = () => {
+      const fullText = xhr.responseText || '';
+      if (fullText.length > processedLen) {
+        const delta = fullText.slice(processedLen);
+        processedLen = fullText.length;
+        parseNdjsonLines(delta, false);
+      }
+    };
+
+    xhr.onload = () => {
+      const fullText = xhr.responseText || '';
+      if (fullText.length > processedLen) {
+        parseNdjsonLines(fullText.slice(processedLen), true);
+      } else if (bufferRemainder.trim()) {
+        parseNdjsonLines('', true);
+      }
+
+      if (streamError) {
+        reject(new Error(streamError));
+        return;
+      }
+
+      if (resolvedResult) {
+        resolve(resolvedResult);
+        return;
+      }
+
+      // Fallback if server returned single JSON error/result instead of NDJSON
+      try {
+        const payload = JSON.parse(fullText) as {
+          analysis?: StructuredAudioAnalysis;
+          error?: string;
+        };
+        if (xhr.status >= 200 && xhr.status < 300 && payload.analysis) {
+          resolve(payload.analysis);
+          return;
+        }
+        reject(new Error(payload.error || `Audio analysis failed (${xhr.status}).`));
+      } catch {
+        reject(new Error(`Audio analysis failed with HTTP ${xhr.status}.`));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error while uploading audio for analysis. Check your connection and retry.'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('Audio analysis request timed out. Please retry with a shorter clip or retry in a moment.'));
+    };
+
+    xhr.send(form);
+  });
 }
 
 export interface DevelopedIdeaPlan {
