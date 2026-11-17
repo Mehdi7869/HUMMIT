@@ -113,6 +113,17 @@ app.get('/api/health', async (_req: Request, res: Response) => {
   });
 });
 
+app.get('/api/config', (_req: Request, res: Response) => {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const anonKey = (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  res.json({
+    supabaseUrl: url,
+    supabaseAnonKey: anonKey,
+    configured: Boolean(url && anonKey && url.startsWith('http')),
+  });
+});
+
 app.get('/api/groq/model-status', async (_req: Request, res: Response) => {
   try {
     const status = await checkGroqAudioModelStatus();

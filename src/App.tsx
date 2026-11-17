@@ -12,7 +12,7 @@ import {
   User,
 } from './types/soundscribe';
 import { dataService, getBackendMode } from './services/dataService';
-import { getSupabaseClient, isSupabaseConfigured } from './services/supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured, ensureSupabaseConfig } from './services/supabaseClient';
 import { AuthGate } from './components/AuthGate';
 import { Sidebar } from './components/Sidebar';
 import { DashboardView } from './views/DashboardView';
@@ -36,7 +36,7 @@ const SECTION_TITLES: Record<NavSection, string> = {
 };
 
 export default function App() {
-  const backendMode: BackendMode = getBackendMode();
+  const [backendMode, setBackendMode] = useState<BackendMode>(getBackendMode());
 
   const [authChecking, setAuthChecking] = useState(true);
   const [user, setUser] = useState<User | null>(null);
@@ -86,10 +86,13 @@ export default function App() {
 
   useEffect(() => {
     let mounted = true;
+    let authSub: { unsubscribe: () => void } | null = null;
+
     dataService
       .getSessionUser()
       .then((sessionUser) => {
         if (!mounted) return;
+        setBackendMode(getBackendMode());
         setUser(sessionUser);
         if (sessionUser) {
           loadWorkspaceData(sessionUser.id);
@@ -104,7 +107,9 @@ export default function App() {
         if (mounted) setAuthChecking(false);
       });
 
-    if (isSupabaseConfigured) {
+    ensureSupabaseConfig().then((configured) => {
+      if (!configured || !mounted) return;
+      setBackendMode(getBackendMode());
       const supabase = getSupabaseClient();
       const sub = supabase?.auth.onAuthStateChange((_event, session) => {
         if (!session?.user) {
@@ -117,18 +122,19 @@ export default function App() {
           setFavorites([]);
         }
       });
-      return () => {
-        mounted = false;
-        sub?.data.subscription.unsubscribe();
-      };
-    }
+      if (sub?.data?.subscription) {
+        authSub = sub.data.subscription;
+      }
+    });
 
     return () => {
       mounted = false;
+      authSub?.unsubscribe();
     };
   }, [loadWorkspaceData]);
 
   const handleAuthenticated = (authedUser: User) => {
+    setBackendMode(getBackendMode());
     setUser(authedUser);
     setActiveSection('dashboard');
     setSelectedRecordingId(null);

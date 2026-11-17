@@ -10,7 +10,7 @@ import {
 } from '../types/soundscribe';
 import { getExtensionFromMimeType } from './audioEngine';
 import { localDb } from './localDb';
-import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
+import { getSupabaseClient, isSupabaseConfigured, ensureSupabaseConfig } from './supabaseClient';
 
 export const GUEST_USER_PREFIX = 'guest_';
 export const GUEST_SESSION_KEY = 'soundscribe_guest_user';
@@ -62,6 +62,7 @@ function defaultUserFromSupabase(authUser: {
 export const dataService = {
   // ---------------- AUTHENTICATION ----------------
   async getSessionUser(): Promise<User | null> {
+    await ensureSupabaseConfig();
     if (typeof window !== 'undefined') {
       const guestJson = localStorage.getItem(GUEST_SESSION_KEY);
       if (guestJson) {
@@ -150,6 +151,7 @@ export const dataService = {
   },
 
   async register(email: string, password: string, displayName: string): Promise<User> {
+    await ensureSupabaseConfig();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(GUEST_SESSION_KEY);
     }
@@ -177,6 +179,7 @@ export const dataService = {
   },
 
   async login(email: string, password: string): Promise<User> {
+    await ensureSupabaseConfig();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(GUEST_SESSION_KEY);
     }
@@ -194,6 +197,7 @@ export const dataService = {
   },
 
   async logout(): Promise<void> {
+    await ensureSupabaseConfig();
     if (typeof window !== 'undefined') {
       localStorage.removeItem(GUEST_SESSION_KEY);
     }
