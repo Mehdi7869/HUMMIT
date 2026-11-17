@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import {
   Analysis,
+  AnalysisEngine,
   AnalysisMode,
   ChordProgressionSuggestion,
   Composition,
@@ -58,6 +59,12 @@ const MODE_OPTIONS: Array<{ value: AnalysisMode; label: string; hint: string }> 
   { value: 'voice', label: 'Mode B: Voice / Lyrics', hint: 'Prioritizes speech/vocal transcription, lyrics & delivery' },
 ];
 
+const ENGINE_OPTIONS: Array<{ value: AnalysisEngine; label: string; hint: string }> = [
+  { value: 'auto', label: 'Auto (Best Available)', hint: 'Uses Groq Whisper-large-v3 for vocals + Gemini/Groq for musical reasoning' },
+  { value: 'groq', label: 'Groq (whisper-large-v3)', hint: 'Free tier Groq Whisper-large-v3 speech recognition + DSP telemetry' },
+  { value: 'gemini', label: 'Gemini AI', hint: 'Gemini multimodal audio model' },
+];
+
 function normalizeStoredAnalysis(raw: unknown): StructuredAudioAnalysis {
   const obj = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const legacyTempo = typeof obj.estimated_tempo === 'string' ? obj.estimated_tempo : null;
@@ -69,6 +76,9 @@ function normalizeStoredAnalysis(raw: unknown): StructuredAudioAnalysis {
     recording_type:
       (obj.recording_type as StructuredAudioAnalysis['recording_type']) || 'unknown',
     analysis_mode: (obj.analysis_mode as AnalysisMode) || 'auto',
+    analysis_engine: (obj.analysis_engine as StructuredAudioAnalysis['analysis_engine']) || undefined,
+    transcription_model: typeof obj.transcription_model === 'string' ? obj.transcription_model : undefined,
+    detected_language: typeof obj.detected_language === 'string' ? obj.detected_language : undefined,
     audio_summary: typeof obj.audio_summary === 'string' ? obj.audio_summary : '',
     transcription: typeof obj.transcription === 'string' ? obj.transcription : '',
     lyrics: typeof obj.lyrics === 'string' ? obj.lyrics : '',
@@ -191,6 +201,7 @@ export function RecordingDetailView({
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>(
     normalizedAnalysis?.analysis_mode || 'auto'
   );
+  const [analysisEngine, setAnalysisEngine] = useState<AnalysisEngine>('auto');
   const [analyzing, setAnalyzing] = useState(false);
   const [pipelineProgress, setPipelineProgress] = useState<AnalysisProgressUpdate | null>(null);
   const [completedStages, setCompletedStages] = useState<AnalysisPipelineStage[]>([]);
@@ -291,10 +302,14 @@ export function RecordingDetailView({
     setStatusNotice('Recording details updated.');
   };
 
-  const runAnalysis = async (modeOverride?: AnalysisMode) => {
+  const runAnalysis = async (modeOverride?: AnalysisMode, engineOverride?: AnalysisEngine) => {
     const modeToUse = modeOverride || analysisMode;
+    const engineToUse = engineOverride || analysisEngine;
     if (modeOverride) {
       setAnalysisMode(modeOverride);
+    }
+    if (engineOverride) {
+      setAnalysisEngine(engineOverride);
     }
     setAnalyzing(true);
     setAnalysisError(null);
@@ -319,6 +334,7 @@ export function RecordingDetailView({
         audioBlob,
         mimeType: recording.mime_type,
         analysisMode: modeToUse,
+        engine: engineToUse,
         title: recording.title,
         notes: recording.description,
         duration: recording.duration,
@@ -816,16 +832,40 @@ export function RecordingDetailView({
       <section className="rounded-xl bg-[#12141C] border border-white/[0.08] p-6 space-y-5">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h2 className="font-display text-lg font-semibold text-white">
-              SoundScribe Audio Analysis Engine
-            </h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-display text-lg font-semibold text-white">
+                SoundScribe Audio Analysis Engine
+              </h2>
+              <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-violet-500/10 text-violet-300 border border-violet-500/20">
+                Groq Whisper v3 + DSP
+              </span>
+            </div>
             <p className="text-xs text-slate-400">
-              Real server-side FFmpeg validation, DSP contour/rhythm telemetry, and Gemini AI
-              audio understanding. Original audio is always preserved.
+              Server-side FFmpeg validation, DSP contour/rhythm telemetry, and Groq Whisper-large-v3
+              or Gemini audio understanding.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="analysis-engine-select" className="text-xs text-slate-400">
+                Engine:
+              </label>
+              <select
+                id="analysis-engine-select"
+                value={analysisEngine}
+                disabled={analyzing}
+                onChange={(e) => setAnalysisEngine(e.target.value as AnalysisEngine)}
+                className="px-3 py-1.5 rounded-lg bg-[#090A0E] border border-white/[0.1] text-xs text-white focus:outline-none focus:border-[#8B5CF6]"
+              >
+                {ENGINE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="flex items-center gap-1.5">
               <label htmlFor="analysis-mode-select" className="text-xs text-slate-400">
                 Mode:
@@ -1153,7 +1193,7 @@ export function RecordingDetailView({
                   <Mic2 className="w-3.5 h-3.5 text-[#06B6D4]" />
                   <span>Audio Overview</span>
                 </h3>
-                <div className="flex items-center gap-3 text-xs text-slate-400">
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-slate-400">
                   <span>
                     Detected Type:{' '}
                     <strong className="text-white capitalize">
@@ -1167,6 +1207,24 @@ export function RecordingDetailView({
                       {normalizedAnalysis.analysis_mode || 'auto'}
                     </strong>
                   </span>
+                  {normalizedAnalysis.transcription_model && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                        {normalizedAnalysis.transcription_model}
+                      </span>
+                    </>
+                  )}
+                  {normalizedAnalysis.analysis_engine && (
+                    <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-violet-500/10 text-violet-300 border border-violet-500/30 uppercase">
+                      {normalizedAnalysis.analysis_engine}
+                    </span>
+                  )}
+                  {normalizedAnalysis.detected_language && (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-sky-500/10 text-sky-300 border border-sky-500/30 uppercase">
+                      {normalizedAnalysis.detected_language}
+                    </span>
+                  )}
                 </div>
               </div>
               <p className="text-sm text-slate-200 leading-relaxed">

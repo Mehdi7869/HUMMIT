@@ -147,24 +147,41 @@ export function Sidebar({
           )}
           <div className="min-w-0">
             <div className="text-xs font-medium text-slate-200 truncate">
-              {backendMode === 'supabase' ? 'Supabase Cloud' : 'Local Dev Mode'}
+              {user.id.startsWith('guest_')
+                ? 'Guest Mode (Unsigned)'
+                : backendMode === 'supabase'
+                  ? 'Supabase Cloud'
+                  : 'Local Dev Mode'}
             </div>
             <div className="text-[11px] text-slate-400 truncate">
-              {backendMode === 'supabase' ? 'RLS & private bucket active' : 'IndexedDB browser storage'}
+              {user.id.startsWith('guest_')
+                ? 'IndexedDB local storage'
+                : backendMode === 'supabase'
+                  ? 'RLS & private bucket active'
+                  : 'IndexedDB browser storage'}
             </div>
           </div>
         </button>
 
         <div className="flex items-center justify-between gap-2 px-2 py-1">
           <div className="min-w-0">
-            <div className="text-xs font-semibold text-white truncate">{user.display_name}</div>
-            <div className="text-[11px] text-slate-400 truncate">{user.email}</div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-white truncate">{user.display_name}</span>
+              {user.id.startsWith('guest_') && (
+                <span className="px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                  Guest
+                </span>
+              )}
+            </div>
+            <div className="text-[11px] text-slate-400 truncate">
+              {user.id.startsWith('guest_') ? 'Unsigned session' : user.email}
+            </div>
           </div>
           <button
             type="button"
             onClick={onLogout}
-            title="Sign out"
-            aria-label="Sign out"
+            title={user.id.startsWith('guest_') ? 'Exit Guest Mode' : 'Sign out'}
+            aria-label={user.id.startsWith('guest_') ? 'Exit Guest Mode' : 'Sign out'}
             className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors shrink-0"
           >
             <LogOut className="w-4 h-4" />

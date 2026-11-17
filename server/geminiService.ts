@@ -227,9 +227,10 @@ export async function analyzeRecordingWithGemini(params: {
   analysisMode: AnalysisMode;
   title?: string;
   notes?: string;
+  externalTranscript?: string | null;
   onStage?: (stage: 'analyzing' | 'extracting', detail: string) => void;
 }): Promise<StructuredAudioAnalysis> {
-  const { processedAudio, analysisMode } = params;
+  const { processedAudio, analysisMode, externalTranscript } = params;
   const { dsp, geminiBuffer, geminiMimeType, detectedContainer } = processedAudio;
 
   const ai = getGeminiClient();
@@ -237,10 +238,10 @@ export async function analyzeRecordingWithGemini(params: {
 
   params.onStage?.('analyzing', 'Submitting processed audio to Gemini AI...');
 
-  // For voice/lyrics focus (or auto when speech/singing may be present), optionally get a
-  // crisp verbatim transcript from gemini-3.5-transcribe to ground lyric extraction.
-  let dedicatedTranscript: string | null = null;
-  if (analysisMode === 'voice') {
+  // If an external high-accuracy transcript (e.g. from Groq Whisper-large-v3) is provided, use it directly.
+  // Otherwise, for voice/lyrics focus, get a transcript from gemini-3.5-transcribe to ground lyric extraction.
+  let dedicatedTranscript: string | null = externalTranscript || null;
+  if (!dedicatedTranscript && analysisMode === 'voice') {
     dedicatedTranscript = await transcribeWithDedicatedModel(ai, geminiMimeType, base64Audio);
   }
 

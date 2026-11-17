@@ -1,4 +1,4 @@
-import { AnalysisMode, StructuredAudioAnalysis } from '../types/soundscribe';
+import { AnalysisEngine, AnalysisMode, StructuredAudioAnalysis } from '../types/soundscribe';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 import { getExtensionFromMimeType, validateAudioBlobForAnalysis } from './audioEngine';
 
@@ -17,6 +17,29 @@ export interface AnalysisProgressUpdate {
   totalBytes?: number;
 }
 
+export interface ServerHealthResponse {
+  ok: boolean;
+  geminiConfigured: boolean;
+  groqConfigured: boolean;
+  groqModel?: string;
+  groqModelStatus?: {
+    model: string;
+    usable: boolean;
+    deprecated: boolean;
+    status: 'active' | 'deprecated' | 'unknown';
+    tier: 'free' | 'developer';
+    details: string;
+    rateLimits: {
+      rpm: number;
+      rpd: number;
+      audioSecondsPerHour?: number;
+      audioSecondsPerDay?: number;
+      maxFileSizeMb: number;
+    };
+  };
+  supabaseConfigured: boolean;
+}
+
 async function getAuthHeader(): Promise<Record<string, string>> {
   if (isSupabaseConfigured) {
     const supabase = getSupabaseClient();
@@ -31,11 +54,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   return { Authorization: 'Bearer local-session' };
 }
 
-export async function checkServerHealth(): Promise<{
-  ok: boolean;
-  geminiConfigured: boolean;
-  supabaseConfigured: boolean;
-}> {
+export async function checkServerHealth(): Promise<ServerHealthResponse> {
   const res = await fetch('/api/health');
   if (!res.ok) {
     throw new Error('Unable to reach SoundScribe server.');
@@ -47,6 +66,7 @@ export async function requestAudioAnalysis(params: {
   audioBlob: Blob;
   mimeType: string;
   analysisMode?: AnalysisMode;
+  engine?: AnalysisEngine;
   title?: string;
   notes?: string;
   duration?: number;
@@ -60,6 +80,7 @@ export async function requestAudioAnalysis(params: {
   form.append('audio', params.audioBlob, `recording.${ext}`);
   form.append('mimeType', effectiveMime);
   form.append('analysisMode', params.analysisMode || 'auto');
+  if (params.engine) form.append('engine', params.engine);
   if (params.title) form.append('title', params.title);
   if (params.notes) form.append('notes', params.notes);
   if (typeof params.duration === 'number') form.append('duration', String(params.duration));

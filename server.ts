@@ -12,7 +12,18 @@ import {
   developIdeaWithGemini,
   GeminiServiceError,
 } from './server/geminiService.ts';
-import type { AnalysisMode } from './src/types/soundscribe.ts';
+import {
+  analyzeRecordingWithGroq,
+  transcribeWithGroqWhisper,
+  developIdeaWithGroq,
+  assistLyricsWithGroq,
+  chatMusicAssistantWithGroq,
+  checkGroqAudioModelStatus,
+  getGroqAudioModel,
+  isGroqConfigured,
+  GroqServiceError,
+} from './server/groqService.ts';
+import type { AnalysisMode, AnalysisEngine, StructuredAudioAnalysis } from './src/types/soundscribe.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -57,6 +68,9 @@ function resolveHttpErrorStatus(error: unknown): { status: number; message: stri
   if (error instanceof GeminiServiceError) {
     return { status: error.status, message: error.message };
   }
+  if (error instanceof GroqServiceError) {
+    return { status: error.status, message: error.message };
+  }
   const message =
     error instanceof Error ? error.message : 'Failed to process request.';
 
@@ -76,20 +90,37 @@ function resolveHttpErrorStatus(error: unknown): { status: number; message: stri
   ) {
     return { status: 400, message };
   }
-  if (lower.includes('gemini_api_key')) {
+  if (lower.includes('gemini_api_key') || lower.includes('groq_api_key')) {
     return { status: 503, message };
   }
   return { status: 500, message };
 }
 
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get('/api/health', async (_req: Request, res: Response) => {
+  const groqReady = isGroqConfigured();
+  const groqModel = getGroqAudioModel();
+  const groqStatus = await checkGroqAudioModelStatus(groqModel);
+
   res.json({
     ok: true,
     geminiConfigured: Boolean(
       process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
     ),
+    groqConfigured: groqReady,
+    groqModel,
+    groqModelStatus: groqStatus,
     supabaseConfigured: Boolean(supabaseUrl && supabaseAnonKey),
   });
+});
+
+app.get('/api/groq/model-status', async (_req: Request, res: Response) => {
+  try {
+    const status = await checkGroqAudioModelStatus();
+    return res.json(status);
+  } catch (error) {
+    const { status, message } = resolveHttpErrorStatus(error);
+    return res.status(status).json({ error: message });
+  }
 });
 
 app.post(
@@ -113,16 +144,20 @@ app.post(
         return res.status(400).json({ error: 'No audio file was provided for analysis.' });
       }
 
-      const { title, notes, mimeType, analysisMode } = req.body as {
+      const { title, notes, mimeType, analysisMode, engine } = req.body as {
         title?: string;
         notes?: string;
         duration?: string;
         mimeType?: string;
         analysisMode?: string;
+        engine?: string;
       };
 
       const resolvedMode: AnalysisMode =
         analysisMode === 'humming' || analysisMode === 'voice' ? analysisMode : 'auto';
+
+      const resolvedEngine: AnalysisEngine =
+        engine === 'groq' || engine === 'gemini' ? engine : 'auto';
 
       if (isStreaming) {
         res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
@@ -147,13 +182,107 @@ app.post(
         originalName: file.originalname,
       });
 
-      const analysis = await analyzeRecordingWithGemini({
-        processedAudio,
-        analysisMode: resolvedMode,
-        title,
-        notes,
-        onStage: (stage, detail) => emitStage(stage, detail),
-      });
+      const groqReady = isGroqConfigured();
+      const geminiReady = Boolean(
+        process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
+      );
+
+      let analysis: StructuredAudioAnalysis;
+
+      if (resolvedEngine === 'groq') {
+        if (!groqReady) {
+          throw new GroqServiceError(
+            'GROQ_API_KEY is not configured on the server. Add your free Groq API key to .env to use Whisper audio analysis.',
+            503
+          );
+        }
+        analysis = await analyzeRecordingWithGroq({
+          processedAudio,
+          analysisMode: resolvedMode,
+          title,
+          notes,
+          onStage: (stage, detail) => emitStage(stage, detail),
+        });
+        analysis.analysis_engine = 'groq';
+        analysis.transcription_model = getGroqAudioModel();
+      } else if (resolvedEngine === 'gemini') {
+        if (!geminiReady) {
+          throw new GeminiServiceError(
+            'GEMINI_API_KEY is not configured on the server. Add your Gemini API key in .env or Settings.',
+            503
+          );
+        }
+        analysis = await analyzeRecordingWithGemini({
+          processedAudio,
+          analysisMode: resolvedMode,
+          title,
+          notes,
+          onStage: (stage, detail) => emitStage(stage, detail),
+        });
+        analysis.analysis_engine = 'gemini';
+      } else {
+        // 'auto' mode
+        if (groqReady && geminiReady) {
+          // Hybrid mode: Groq Whisper-large-v3 provides high accuracy speech/lyric recognition, Gemini does multimodal reasoning
+          emitStage('analyzing', `Transcribing audio with Groq Whisper (${getGroqAudioModel()})...`);
+          let whisperText: string | null = null;
+          let whisperLanguage: string | undefined = undefined;
+          try {
+            const whisperRes = await transcribeWithGroqWhisper({
+              audioBuffer: processedAudio.geminiBuffer,
+              mimeType: processedAudio.geminiMimeType,
+              originalFilename: file.originalname,
+              prompt: title,
+            });
+            if (whisperRes.isVerbal && whisperRes.text) {
+              whisperText = whisperRes.text;
+              whisperLanguage = whisperRes.language;
+            }
+          } catch (whisperErr) {
+            console.warn('Groq whisper transcription in auto mode had error:', whisperErr);
+          }
+
+          analysis = await analyzeRecordingWithGemini({
+            processedAudio,
+            analysisMode: resolvedMode,
+            title,
+            notes,
+            externalTranscript: whisperText,
+            onStage: (stage, detail) => emitStage(stage, detail),
+          });
+          analysis.analysis_engine = whisperText ? 'hybrid' : 'gemini';
+          if (whisperText) {
+            analysis.transcription_model = getGroqAudioModel();
+            analysis.detected_language = whisperLanguage;
+          }
+        } else if (groqReady) {
+          // Groq is available, Gemini is not
+          analysis = await analyzeRecordingWithGroq({
+            processedAudio,
+            analysisMode: resolvedMode,
+            title,
+            notes,
+            onStage: (stage, detail) => emitStage(stage, detail),
+          });
+          analysis.analysis_engine = 'groq';
+          analysis.transcription_model = getGroqAudioModel();
+        } else if (geminiReady) {
+          // Gemini is available, Groq is not
+          analysis = await analyzeRecordingWithGemini({
+            processedAudio,
+            analysisMode: resolvedMode,
+            title,
+            notes,
+            onStage: (stage, detail) => emitStage(stage, detail),
+          });
+          analysis.analysis_engine = 'gemini';
+        } else {
+          throw new GroqServiceError(
+            'Neither GROQ_API_KEY nor GEMINI_API_KEY is configured. Add your free GROQ_API_KEY (for Whisper audio analysis) to .env to analyze recordings.',
+            503
+          );
+        }
+      }
 
       if (isStreaming) {
         res.write(`${JSON.stringify({ type: 'result', analysis })}\n`);
@@ -229,18 +358,41 @@ app.post(
         }
       }
 
-      const plan = await developIdeaWithGemini({
-        audioBuffer: normalizedBuffer,
-        mimeType: normalizedMime,
-        title: body.title || 'Untitled Musical Idea',
-        notes: body.notes,
-        transcript: body.transcript,
-        lyrics: body.lyrics,
-        mood: parseList(body.mood),
-        genre: parseList(body.genre),
-        analysisSummary: body.analysisSummary,
-        creativeFocus: body.creativeFocus,
-      });
+      let plan;
+      const geminiReady = Boolean(
+        process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
+      );
+
+      if (geminiReady) {
+        plan = await developIdeaWithGemini({
+          audioBuffer: normalizedBuffer,
+          mimeType: normalizedMime,
+          title: body.title || 'Untitled Musical Idea',
+          notes: body.notes,
+          transcript: body.transcript,
+          lyrics: body.lyrics,
+          mood: parseList(body.mood),
+          genre: parseList(body.genre),
+          analysisSummary: body.analysisSummary,
+          creativeFocus: body.creativeFocus,
+        });
+      } else if (isGroqConfigured()) {
+        plan = await developIdeaWithGroq({
+          title: body.title || 'Untitled Musical Idea',
+          notes: body.notes,
+          transcript: body.transcript,
+          lyrics: body.lyrics,
+          mood: parseList(body.mood),
+          genre: parseList(body.genre),
+          analysisSummary: body.analysisSummary,
+          creativeFocus: body.creativeFocus,
+        });
+      } else {
+        throw new GroqServiceError(
+          'Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. Set GROQ_API_KEY or GEMINI_API_KEY in .env.',
+          503
+        );
+      }
 
       return res.json({ plan });
     } catch (error) {
@@ -269,15 +421,37 @@ app.post(
         return res.status(400).json({ error: 'Lyric action is required.' });
       }
 
-      const result = await assistLyricsWithGemini({
-        action,
-        title: title || 'Untitled Song',
-        currentLyrics: currentLyrics || '',
-        selectedText,
-        targetTone,
-        mood,
-        genre,
-      });
+      let result;
+      const geminiReady = Boolean(
+        process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
+      );
+
+      if (geminiReady) {
+        result = await assistLyricsWithGemini({
+          action,
+          title: title || 'Untitled Song',
+          currentLyrics: currentLyrics || '',
+          selectedText,
+          targetTone,
+          mood,
+          genre,
+        });
+      } else if (isGroqConfigured()) {
+        result = await assistLyricsWithGroq({
+          action,
+          title: title || 'Untitled Song',
+          currentLyrics: currentLyrics || '',
+          selectedText,
+          targetTone,
+          mood,
+          genre,
+        });
+      } else {
+        throw new GroqServiceError(
+          'Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. Set GROQ_API_KEY or GEMINI_API_KEY in .env.',
+          503
+        );
+      }
 
       return res.json(result);
     } catch (error) {
@@ -301,10 +475,27 @@ app.post(
         return res.status(400).json({ error: 'Conversation messages are required.' });
       }
 
-      const reply = await chatMusicAssistantWithGemini({
-        messages,
-        contextSummary,
-      });
+      let reply: string;
+      const geminiReady = Boolean(
+        process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== 'MY_GEMINI_API_KEY'
+      );
+
+      if (geminiReady) {
+        reply = await chatMusicAssistantWithGemini({
+          messages,
+          contextSummary,
+        });
+      } else if (isGroqConfigured()) {
+        reply = await chatMusicAssistantWithGroq({
+          messages,
+          contextSummary,
+        });
+      } else {
+        throw new GroqServiceError(
+          'Neither GEMINI_API_KEY nor GROQ_API_KEY is configured. Set GROQ_API_KEY or GEMINI_API_KEY in .env.',
+          503
+        );
+      }
 
       return res.json({ reply });
     } catch (error) {
@@ -350,4 +541,9 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
+export { app };

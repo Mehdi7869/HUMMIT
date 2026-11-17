@@ -12,6 +12,8 @@ export type BackendMode = 'supabase' | 'local';
 
 export type AnalysisMode = 'auto' | 'humming' | 'voice';
 
+export type AnalysisEngine = 'auto' | 'groq' | 'gemini';
+
 export type RecordingContentType =
   | 'humming'
   | 'singing'
@@ -91,6 +93,9 @@ export interface RhythmAnalysis {
 export interface StructuredAudioAnalysis {
   recording_type: RecordingContentType;
   analysis_mode?: AnalysisMode;
+  analysis_engine?: 'groq' | 'gemini' | 'hybrid';
+  transcription_model?: string;
+  detected_language?: string;
   audio_summary: string;
   transcription: string;
   lyrics: string;

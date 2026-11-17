@@ -206,7 +206,26 @@ export const localDb = {
 
   async updateProfile(userId: string, patch: Partial<User>): Promise<User> {
     const record = await idbGet<LocalAuthRecord>('users', userId);
-    if (!record) throw new Error('User profile not found.');
+    if (!record) {
+      const updated: User = {
+        id: userId,
+        display_name: patch.display_name || 'Guest Musician',
+        email: 'guest@soundscribe.local',
+        avatar_url: patch.avatar_url || null,
+        audio_preferences: patch.audio_preferences || {
+          defaultFormat: 'audio/webm',
+          autoSaveDrafts: true,
+          waveformDensity: 'standard',
+        },
+        ai_preferences: patch.ai_preferences || {
+          creativeFocus: 'songwriting',
+          conservatism: 'balanced',
+        },
+        created_at: new Date().toISOString(),
+      };
+      await this.saveGuestUser(updated);
+      return updated;
+    }
     const updated: User = {
       ...record.user,
       ...patch,
@@ -215,6 +234,15 @@ export const localDb = {
     };
     await idbPut<LocalAuthRecord>('users', { ...record, user: updated });
     return updated;
+  },
+
+  async saveGuestUser(user: User): Promise<void> {
+    await idbPut<LocalAuthRecord>('users', {
+      id: user.id,
+      email: user.email,
+      passwordHash: '',
+      user,
+    });
   },
 
   // Projects

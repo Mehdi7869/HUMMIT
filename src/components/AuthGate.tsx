@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { AudioWaveform, Database, HardDrive, Loader2, Lock, Mail, User as UserIcon } from 'lucide-react';
+import { AudioWaveform, Database, HardDrive, Loader2, Lock, Mail, Sparkles, User as UserIcon } from 'lucide-react';
 import { BackendMode, User } from '../types/soundscribe';
 import { dataService } from '../services/dataService';
 
@@ -14,7 +14,21 @@ export function AuthGate({ backendMode, onAuthenticated }: AuthGateProps) {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleGuestLogin = async () => {
+    setGuestLoading(true);
+    setError(null);
+    try {
+      const guest = await dataService.continueAsGuest();
+      onAuthenticated(guest);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to launch guest mode.');
+    } finally {
+      setGuestLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -204,13 +218,44 @@ export function AuthGate({ backendMode, onAuthenticated }: AuthGateProps) {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || guestLoading}
               className="w-full py-2.5 px-4 rounded-lg bg-gradient-to-r from-[#8B5CF6] to-[#3B82F6] hover:opacity-95 disabled:opacity-50 text-white text-sm font-semibold transition-opacity flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               <span>{mode === 'register' ? 'Create Studio Account' : 'Sign In'}</span>
             </button>
           </form>
+
+          {/* Guest Mode Option */}
+          <div className="pt-2 space-y-3">
+            <div className="relative flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-white/[0.08]" />
+              </div>
+              <div className="relative px-3 bg-[#0B0C10] text-[11px] font-medium text-slate-500 uppercase tracking-wider">
+                Or test unsigned
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleGuestLogin}
+              disabled={loading || guestLoading}
+              className="w-full py-2.5 px-4 rounded-lg bg-[#141720] hover:bg-[#1C202C] border border-white/[0.12] hover:border-[#8B5CF6]/50 text-white text-sm font-medium transition-all flex items-center justify-center gap-2.5 group shadow-sm"
+            >
+              {guestLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin text-[#8B5CF6]" />
+              ) : (
+                <Sparkles className="w-4 h-4 text-[#8B5CF6] group-hover:scale-110 transition-transform" />
+              )}
+              <span>Continue as Guest (No Sign-In Required)</span>
+            </button>
+
+            <p className="text-[11px] text-center text-slate-400 leading-relaxed">
+              Explore the Recording Studio, Groq Whisper Audio Analysis, and AI Assistant immediately.
+              Data is saved locally in this browser.
+            </p>
+          </div>
         </div>
       </div>
     </div>

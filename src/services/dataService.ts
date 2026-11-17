@@ -12,7 +12,23 @@ import { getExtensionFromMimeType } from './audioEngine';
 import { localDb } from './localDb';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 
+export const GUEST_USER_PREFIX = 'guest_';
+export const GUEST_SESSION_KEY = 'soundscribe_guest_user';
+
+export function isGuestUser(userId?: string): boolean {
+  if (typeof window === 'undefined') return false;
+  if (userId && userId.startsWith(GUEST_USER_PREFIX)) return true;
+  return Boolean(localStorage.getItem(GUEST_SESSION_KEY));
+}
+
+function shouldUseSupabase(userId?: string): boolean {
+  if (!isSupabaseConfigured) return false;
+  if (!userId) return false;
+  return !isGuestUser(userId);
+}
+
 export function getBackendMode(): BackendMode {
+  if (isGuestUser()) return 'local';
   return isSupabaseConfigured ? 'supabase' : 'local';
 }
 
@@ -46,6 +62,18 @@ function defaultUserFromSupabase(authUser: {
 export const dataService = {
   // ---------------- AUTHENTICATION ----------------
   async getSessionUser(): Promise<User | null> {
+    if (typeof window !== 'undefined') {
+      const guestJson = localStorage.getItem(GUEST_SESSION_KEY);
+      if (guestJson) {
+        try {
+          const parsed = JSON.parse(guestJson) as User;
+          if (parsed && parsed.id) return parsed;
+        } catch {
+          localStorage.removeItem(GUEST_SESSION_KEY);
+        }
+      }
+    }
+
     if (isSupabaseConfigured) {
       const supabase = getSupabaseClient()!;
       const {
@@ -83,7 +111,48 @@ export const dataService = {
     return localDb.getSessionUser();
   },
 
+  async continueAsGuest(): Promise<User> {
+    if (typeof window !== 'undefined') {
+      const existing = localStorage.getItem(GUEST_SESSION_KEY);
+      if (existing) {
+        try {
+          const parsed = JSON.parse(existing) as User;
+          if (parsed && parsed.id) return parsed;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    const guestId = `${GUEST_USER_PREFIX}${crypto.randomUUID().slice(0, 8)}`;
+    const guestUser: User = {
+      id: guestId,
+      display_name: 'Guest Musician',
+      email: 'guest@soundscribe.local',
+      avatar_url: null,
+      audio_preferences: {
+        defaultFormat: 'audio/webm',
+        autoSaveDrafts: true,
+        waveformDensity: 'standard',
+      },
+      ai_preferences: {
+        creativeFocus: 'songwriting',
+        conservatism: 'balanced',
+      },
+      created_at: new Date().toISOString(),
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(guestUser));
+    }
+    await localDb.saveGuestUser(guestUser);
+    return guestUser;
+  },
+
   async register(email: string, password: string, displayName: string): Promise<User> {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(GUEST_SESSION_KEY);
+    }
     if (isSupabaseConfigured) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase.auth.signUp({
@@ -108,6 +177,9 @@ export const dataService = {
   },
 
   async login(email: string, password: string): Promise<User> {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(GUEST_SESSION_KEY);
+    }
     if (isSupabaseConfigured) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -122,17 +194,53 @@ export const dataService = {
   },
 
   async logout(): Promise<void> {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(GUEST_SESSION_KEY);
+    }
     if (isSupabaseConfigured) {
-      const supabase = getSupabaseClient()!;
-      const { error } = await supabase.auth.signOut();
-      if (error) throw new Error(error.message);
-      return;
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        try {
+          await supabase.auth.signOut();
+        } catch {
+          // ignore
+        }
+      }
     }
     await localDb.logout();
   },
 
   async updateProfile(userId: string, patch: Partial<User>): Promise<User> {
-    if (isSupabaseConfigured) {
+    if (isGuestUser(userId)) {
+      const guestJson = typeof window !== 'undefined' ? localStorage.getItem(GUEST_SESSION_KEY) : null;
+      const current = guestJson ? (JSON.parse(guestJson) as User) : null;
+      const updated: User = {
+        ...(current || {
+          id: userId,
+          display_name: 'Guest Musician',
+          email: 'guest@soundscribe.local',
+          avatar_url: null,
+          audio_preferences: {
+            defaultFormat: 'audio/webm',
+            autoSaveDrafts: true,
+            waveformDensity: 'standard',
+          },
+          ai_preferences: {
+            creativeFocus: 'songwriting',
+            conservatism: 'balanced',
+          },
+          created_at: new Date().toISOString(),
+        }),
+        ...patch,
+      };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(GUEST_SESSION_KEY, JSON.stringify(updated));
+      }
+      await localDb.saveGuestUser(updated);
+      return updated;
+    }
+
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('profiles')
@@ -154,7 +262,7 @@ export const dataService = {
 
   // ---------------- PROJECTS ----------------
   async listProjects(userId: string): Promise<Project[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('projects')
@@ -168,7 +276,7 @@ export const dataService = {
   },
 
   async saveProject(project: Project): Promise<Project> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(project.user_id)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('projects')
@@ -182,7 +290,7 @@ export const dataService = {
   },
 
   async deleteProject(userId: string, projectId: string): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { error } = await supabase
         .from('projects')
@@ -197,7 +305,7 @@ export const dataService = {
 
   // ---------------- RECORDINGS & PRIVATE AUDIO STORAGE ----------------
   async listRecordings(userId: string): Promise<Recording[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('recordings')
@@ -241,7 +349,7 @@ export const dataService = {
       updated_at: now,
     };
 
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(params.userId)) {
       const supabase = getSupabaseClient()!;
       const { error: uploadError } = await supabase.storage
         .from('recordings')
@@ -250,6 +358,11 @@ export const dataService = {
           upsert: false,
         });
       if (uploadError) {
+        if (uploadError.message.includes('Bucket not found') || uploadError.message.toLowerCase().includes('bucket')) {
+          throw new Error(
+            "Storage upload failed: Bucket 'recordings' not found. In your Supabase Dashboard, go to Storage > click 'New bucket' > name it 'recordings' (lowercase, private) and save."
+          );
+        }
         throw new Error(`Storage upload failed: ${uploadError.message}`);
       }
 
@@ -289,7 +402,7 @@ export const dataService = {
       ...recording,
       updated_at: new Date().toISOString(),
     };
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(recording.user_id)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('recordings')
@@ -312,7 +425,7 @@ export const dataService = {
   },
 
   async deleteRecording(userId: string, recording: Recording): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { error } = await supabase
         .from('recordings')
@@ -327,7 +440,7 @@ export const dataService = {
   },
 
   async getPlaybackUrl(userId: string, recording: Recording): Promise<string> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase.storage
         .from('recordings')
@@ -345,7 +458,7 @@ export const dataService = {
   },
 
   async getAudioBlob(userId: string, recording: Recording): Promise<Blob> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase.storage
         .from('recordings')
@@ -364,7 +477,7 @@ export const dataService = {
 
   // ---------------- ANALYSES ----------------
   async listAnalyses(userId: string): Promise<Analysis[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('analyses')
@@ -378,7 +491,7 @@ export const dataService = {
   },
 
   async saveAnalysis(analysis: Analysis): Promise<Analysis> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(analysis.user_id)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('analyses')
@@ -393,7 +506,7 @@ export const dataService = {
 
   // ---------------- LYRICS ----------------
   async listLyrics(userId: string): Promise<Lyrics[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('lyrics')
@@ -407,7 +520,7 @@ export const dataService = {
   },
 
   async saveLyrics(lyrics: Lyrics): Promise<Lyrics> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(lyrics.user_id)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('lyrics')
@@ -421,7 +534,7 @@ export const dataService = {
   },
 
   async deleteLyrics(userId: string, lyricsId: string): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { error } = await supabase
         .from('lyrics')
@@ -436,7 +549,7 @@ export const dataService = {
 
   // ---------------- COMPOSITIONS ----------------
   async listCompositions(userId: string): Promise<Composition[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('compositions')
@@ -450,7 +563,7 @@ export const dataService = {
   },
 
   async saveComposition(composition: Composition): Promise<Composition> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(composition.user_id)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('compositions')
@@ -464,7 +577,7 @@ export const dataService = {
   },
 
   async deleteComposition(userId: string, compositionId: string): Promise<void> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { error } = await supabase
         .from('compositions')
@@ -479,7 +592,7 @@ export const dataService = {
 
   // ---------------- FAVORITES ----------------
   async listFavorites(userId: string): Promise<Favorite[]> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data, error } = await supabase
         .from('favorites')
@@ -492,7 +605,7 @@ export const dataService = {
   },
 
   async toggleFavorite(userId: string, recordingId: string): Promise<Favorite | null> {
-    if (isSupabaseConfigured) {
+    if (shouldUseSupabase(userId)) {
       const supabase = getSupabaseClient()!;
       const { data: existing } = await supabase
         .from('favorites')

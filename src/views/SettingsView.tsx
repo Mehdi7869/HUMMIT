@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { AIPreferences, AudioPreferences, BackendMode, User } from '../types/soundscribe';
 import { AudioDeviceOption, listAudioInputDevices } from '../services/audioEngine';
-import { checkServerHealth } from '../services/aiClient';
+import { checkServerHealth, ServerHealthResponse } from '../services/aiClient';
 
 interface SettingsViewProps {
   user: User;
@@ -35,10 +35,7 @@ export function SettingsView({
   const [audioPrefs, setAudioPrefs] = useState<AudioPreferences>(user.audio_preferences);
   const [aiPrefs, setAiPrefs] = useState<AIPreferences>(user.ai_preferences);
   const [devices, setDevices] = useState<AudioDeviceOption[]>([]);
-  const [serverHealth, setServerHealth] = useState<{
-    geminiConfigured: boolean;
-    supabaseConfigured: boolean;
-  } | null>(null);
+  const [serverHealth, setServerHealth] = useState<ServerHealthResponse | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -286,14 +283,61 @@ export function SettingsView({
             </div>
           </div>
 
-          <p className="text-xs text-slate-400">
-            All Gemini AI requests run securely through server-side API routes.{' '}
-            {serverHealth
-              ? serverHealth.geminiConfigured
-                ? 'Server Gemini key is active.'
-                : 'Server GEMINI_API_KEY is not currently set.'
-              : ''}
-          </p>
+          {/* Groq Audio Analysis Engine Status Card */}
+          <div className="rounded-lg bg-[#090A0E] border border-white/[0.08] p-4 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-white flex items-center gap-2">
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    serverHealth?.groqConfigured ? 'bg-emerald-400' : 'bg-amber-400'
+                  }`}
+                />
+                Groq Audio Analysis Engine ({serverHealth?.groqModel || 'whisper-large-v3'})
+              </span>
+              <span
+                className={`text-[11px] font-mono px-2 py-0.5 rounded ${
+                  serverHealth?.groqConfigured
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                    : 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                }`}
+              >
+                {serverHealth?.groqConfigured ? 'Active & Usable' : 'Key Not Configured'}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {serverHealth?.groqModelStatus?.details ||
+                'Free tier model whisper-large-v3 provides high-speed, verbatim vocal transcription and audio understanding without deprecation (20 RPM, 2000 RPD, 7,200s audio/hr).'}
+            </p>
+
+            {!serverHealth?.groqConfigured && (
+              <p className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded p-2.5">
+                To activate, add your Groq API key to your <code className="font-mono text-white">.env</code> file:{' '}
+                <code className="font-mono text-white">GROQ_API_KEY="gsk_..."</code>
+              </p>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-slate-400 pt-1">
+            <span>
+              Gemini AI Engine:{' '}
+              {serverHealth?.geminiConfigured ? (
+                <span className="text-emerald-400 font-medium">Configured</span>
+              ) : (
+                <span className="text-slate-500">Not configured</span>
+              )}
+            </span>
+            <span className="text-slate-500">
+              Provider Mode:{' '}
+              {serverHealth?.groqConfigured && serverHealth?.geminiConfigured
+                ? 'Hybrid (Whisper + Gemini)'
+                : serverHealth?.groqConfigured
+                  ? 'Groq Whisper'
+                  : serverHealth?.geminiConfigured
+                    ? 'Gemini'
+                    : 'Local Only'}
+            </span>
+          </div>
         </section>
 
         <div className="flex justify-end">
