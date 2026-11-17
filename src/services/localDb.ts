@@ -6,11 +6,12 @@ import {
   Project,
   Recording,
   User,
-} from '../types/soundscribe';
+} from '../types/hummit';
 
-const DB_NAME = 'soundscribe_local_v1';
+const DB_NAME = 'hummit_local_v1';
 const DB_VERSION = 1;
-const SESSION_KEY = 'soundscribe_local_session_user_id';
+const SESSION_KEY = 'hummit_local_session_user_id';
+const LEGACY_SESSION_KEY = 'soundscribe_local_session_user_id';
 
 interface LocalAuthRecord {
   id: string;
@@ -195,10 +196,12 @@ export const localDb = {
 
   async logout(): Promise<void> {
     localStorage.removeItem(SESSION_KEY);
+    localStorage.removeItem(LEGACY_SESSION_KEY);
   },
 
   async getSessionUser(): Promise<User | null> {
-    const userId = localStorage.getItem(SESSION_KEY);
+    const userId =
+      localStorage.getItem(SESSION_KEY) || localStorage.getItem(LEGACY_SESSION_KEY);
     if (!userId) return null;
     const record = await idbGet<LocalAuthRecord>('users', userId);
     return record?.user ?? null;
@@ -210,7 +213,7 @@ export const localDb = {
       const updated: User = {
         id: userId,
         display_name: patch.display_name || 'Guest Musician',
-        email: 'guest@soundscribe.local',
+        email: 'guest@hummit.local',
         avatar_url: patch.avatar_url || null,
         audio_preferences: patch.audio_preferences || {
           defaultFormat: 'audio/webm',

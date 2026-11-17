@@ -23,7 +23,7 @@ import {
   isGroqConfigured,
   GroqServiceError,
 } from './server/groqService.ts';
-import type { AnalysisMode, AnalysisEngine, StructuredAudioAnalysis } from './src/types/soundscribe.ts';
+import type { AnalysisMode, AnalysisEngine, StructuredAudioAnalysis } from './src/types/hummit.ts';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -548,7 +548,7 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`SoundScribe server listening on http://localhost:${PORT}`);
+    console.log(`HUMMIT server listening on http://localhost:${PORT}`);
   });
 }
 

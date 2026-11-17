@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Bot, Copy, Loader2, Send, Trash2 } from 'lucide-react';
-import { Analysis, ChatMessage, Lyrics, Project, Recording } from '../types/soundscribe';
+import { Analysis, ChatMessage, Lyrics, Project, Recording } from '../types/hummit';
 import { requestAssistantChat } from '../services/aiClient';
 
 interface AssistantViewProps {

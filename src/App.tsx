@@ -10,7 +10,7 @@ import {
   Project,
   Recording,
   User,
-} from './types/soundscribe';
+} from './types/hummit';
 import { dataService, getBackendMode } from './services/dataService';
 import { getSupabaseClient, isSupabaseConfigured, ensureSupabaseConfig } from './services/supabaseClient';
 import { AuthGate } from './components/AuthGate';
@@ -267,7 +267,7 @@ export default function App() {
       <div className="min-h-screen bg-[#0B0C10] flex items-center justify-center text-slate-300">
         <div className="flex items-center gap-2.5 text-sm">
           <Loader2 className="w-5 h-5 animate-spin text-[#8B5CF6]" />
-          <span>Loading SoundScribe studio...</span>
+          <span>Loading HUMMIT studio...</span>
         </div>
       </div>
     );

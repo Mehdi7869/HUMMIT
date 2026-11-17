@@ -17,7 +17,7 @@ import {
   Project,
   Recording,
   User,
-} from '../types/soundscribe';
+} from '../types/hummit';
 import { requestLyricAssist } from '../services/aiClient';
 import { exportLyricsPdf, exportLyricsTxt } from '../services/exportService';
 import { ConfirmDialog } from '../components/ConfirmDialog';

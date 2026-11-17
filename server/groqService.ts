@@ -3,7 +3,7 @@ import type {
   AnalysisMode,
   RecordingContentType,
   StructuredAudioAnalysis,
-} from '../src/types/soundscribe.ts';
+} from '../src/types/hummit.ts';
 
 export class GroqServiceError extends Error {
   status: number;
@@ -253,7 +253,7 @@ export async function transcribeWithGroqWhisper(params: {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'User-Agent': 'SoundScribe-Audio-Analysis-Engine/1.0',
+        'User-Agent': 'HUMMIT-Audio-Analysis-Engine/1.0',
       },
       body: formData,
       signal: controller.signal,
@@ -388,7 +388,7 @@ async function callGroqJsonChat(params: {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
-          'User-Agent': 'SoundScribe-Audio-Analysis-Engine/1.0',
+          'User-Agent': 'HUMMIT-Audio-Analysis-Engine/1.0',
         },
         body: JSON.stringify({
           model,
@@ -514,7 +514,7 @@ Determine honestly from the audio and telemetry whether the recording is humming
 - If speech: transcribe accurately, describe vocal cadence/intent, and set melody.detected to false unless clear singing occurs.
 - If singing: provide both verbatim lyrics/transcription AND melody/rhythm analysis.`;
 
-  const systemPrompt = `You are SoundScribe Audio Analysis Engine powered by Groq Whisper and server-side DSP telemetry.
+  const systemPrompt = `You are HUMMIT Audio Analysis Engine powered by Groq Whisper and server-side DSP telemetry.
 You perform rigorous, truthful analysis of humming, singing, speech, and instrumental recordings.
 Never fabricate lyrics, exact BPM, key signatures, or musical notes when unmeasurable.
 You must respond with valid JSON matching the requested schema.`;
@@ -718,7 +718,7 @@ export async function developIdeaWithGroq(params: {
   analysisSummary?: string;
   creativeFocus?: string;
 }): Promise<GroqDevelopIdeaResult> {
-  const systemPrompt = `You are SoundScribe Composition Architect, a veteran producer and songwriter helping an independent musician expand a raw sketch into a cohesive arrangement. Respect the artist’s voice and offer concrete, musical, playable ideas. You must respond with valid JSON matching the requested schema.`;
+  const systemPrompt = `You are HUMMIT Composition Architect, a veteran producer and songwriter helping an independent musician expand a raw sketch into a cohesive arrangement. Respect the artist’s voice and offer concrete, musical, playable ideas. You must respond with valid JSON matching the requested schema.`;
 
   const userPrompt = `Develop a complete, editable songwriting and arrangement blueprint based on the musician's sketch and context below.
 
@@ -826,7 +826,7 @@ export async function chatMusicAssistantWithGroq(params: {
   const systemMessage = {
     role: 'system',
     content:
-      'You are SoundScribe AI Music Assistant, an insightful studio producer, arranger, and songwriting partner. Give concrete, musical, grounded advice (chord voicings, rhythmic feels, lyric phrasing, arrangement dynamics, and production ideas). Keep formatting clean and scannable.' +
+      'You are HUMMIT AI Music Assistant, an insightful studio producer, arranger, and songwriting partner. Give concrete, musical, grounded advice (chord voicings, rhythmic feels, lyric phrasing, arrangement dynamics, and production ideas). Keep formatting clean and scannable.' +
       (params.contextSummary ? `\nActive Studio Context: ${params.contextSummary}` : ''),
   };
 
@@ -835,7 +835,7 @@ export async function chatMusicAssistantWithGroq(params: {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
-      'User-Agent': 'SoundScribe-Audio-Analysis-Engine/1.0',
+      'User-Agent': 'HUMMIT-Audio-Analysis-Engine/1.0',
     },
     body: JSON.stringify({
       model,

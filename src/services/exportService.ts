@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf';
-import { Composition, Lyrics } from '../types/soundscribe';
+import { Composition, Lyrics } from '../types/hummit';
 
 function downloadTextFile(filename: string, content: string): void {
   const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
@@ -18,13 +18,13 @@ function slugify(input: string): string {
     input
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'soundscribe-export'
+      .replace(/^-|-$/g, '') || 'hummit-export'
   );
 }
 
 export function formatCompositionAsText(comp: Composition): string {
   const lines: string[] = [
-    `SOUNDSCRIBE COMPOSITION SHEET — v${comp.version}`,
+    `HUMMIT COMPOSITION SHEET — v${comp.version}`,
     `Title: ${comp.title}`,
     `Updated: ${new Date(comp.updated_at).toLocaleString()}`,
     '',
@@ -125,7 +125,7 @@ export function exportCompositionPdf(comp: Composition): void {
   doc.setFontSize(9.5);
   doc.setTextColor(100, 110, 130);
   doc.text(
-    `SoundScribe Composition Blueprint · Version ${comp.version} · ${new Date(comp.updated_at).toLocaleDateString()}`,
+    `HUMMIT Composition Blueprint · Version ${comp.version} · ${new Date(comp.updated_at).toLocaleDateString()}`,
     margin,
     y
   );
@@ -207,7 +207,7 @@ export function exportLyricsPdf(lyrics: Lyrics): void {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(100, 110, 130);
-  doc.text(`SoundScribe Lyric Sheet · v${lyrics.version}`, margin, y);
+  doc.text(`HUMMIT Lyric Sheet · v${lyrics.version}`, margin, y);
   y += 28;
 
   const sectionsText =

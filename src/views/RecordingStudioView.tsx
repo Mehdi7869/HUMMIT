@@ -14,7 +14,7 @@ import {
   Upload,
   X,
 } from 'lucide-react';
-import { Project, Recording, User } from '../types/soundscribe';
+import { Project, Recording, User } from '../types/hummit';
 import {
   AudioDeviceOption,
   CapturedAudio,

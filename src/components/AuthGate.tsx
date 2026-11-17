@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { AudioWaveform, Database, HardDrive, Loader2, Lock, Mail, Sparkles, User as UserIcon } from 'lucide-react';
-import { BackendMode, User } from '../types/soundscribe';
+import { BackendMode, User } from '../types/hummit';
 import { dataService } from '../services/dataService';
 
 interface AuthGateProps {
@@ -63,7 +63,7 @@ export function AuthGate({ backendMode, onAuthenticated }: AuthGateProps) {
       <div className="relative lg:w-1/2 min-h-[240px] lg:min-h-screen overflow-hidden border-b lg:border-b-0 lg:border-r border-white/[0.08] flex flex-col justify-between p-8 lg:p-14">
         <img
           src="/src/assets/images/studio_hero_backdrop_1794847607064.jpg"
-          alt="SoundScribe recording studio console"
+          alt="HUMMIT recording studio console"
           referrerPolicy="no-referrer"
           className="absolute inset-0 w-full h-full object-cover opacity-50"
         />
@@ -74,7 +74,7 @@ export function AuthGate({ backendMode, onAuthenticated }: AuthGateProps) {
             <AudioWaveform className="w-5 h-5 text-white" />
           </div>
           <span className="font-display text-xl font-bold tracking-tight text-white">
-            SoundScribe
+            HUMMIT
           </span>
         </div>
 

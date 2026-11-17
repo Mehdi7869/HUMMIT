@@ -1,5 +1,5 @@
 {
-  "name": "SoundScribe",
+  "name": "HUMMIT",
   "description": "Never Lose a Musical Idea. A creative music-production workspace for capturing audio sketches, organizing projects, writing lyrics, and developing compositions with Gemini AI.",
   "requestFramePermissions": [
     "microphone"

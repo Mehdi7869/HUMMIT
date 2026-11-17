@@ -13,7 +13,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react';
-import { Analysis, Favorite, NavSection, Project, Recording } from '../types/soundscribe';
+import { Analysis, Favorite, NavSection, Project, Recording } from '../types/hummit';
 import { WaveformPlayer } from '../components/WaveformPlayer';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { formatDuration, formatFileSize, formatRelativeDate } from '../utils/formatters';

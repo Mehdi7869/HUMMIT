@@ -13,7 +13,7 @@ import {
   Settings,
   X,
 } from 'lucide-react';
-import { BackendMode, NavSection, User } from '../types/soundscribe';
+import { BackendMode, NavSection, User } from '../types/hummit';
 
 interface SidebarProps {
   activeSection: NavSection;
@@ -80,7 +80,7 @@ export function Sidebar({
             <AudioWaveform className="w-4 h-4 text-white" />
           </div>
           <span className="font-display text-lg font-bold tracking-tight text-white whitespace-nowrap">
-            SoundScribe
+            HUMMIT
           </span>
         </button>
 

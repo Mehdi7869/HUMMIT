@@ -10,7 +10,7 @@ import {
   Sparkles,
   User as UserIcon,
 } from 'lucide-react';
-import { AIPreferences, AudioPreferences, BackendMode, User } from '../types/soundscribe';
+import { AIPreferences, AudioPreferences, BackendMode, User } from '../types/hummit';
 import { AudioDeviceOption, listAudioInputDevices } from '../services/audioEngine';
 import { checkServerHealth, ServerHealthResponse } from '../services/aiClient';
 
@@ -21,7 +21,7 @@ interface SettingsViewProps {
   onLogout: () => Promise<void>;
 }
 
-const SQL_MIGRATION_SNIPPET = `-- Run supabase/migrations/001_soundscribe_schema.sql in your Supabase SQL Editor.
+const SQL_MIGRATION_SNIPPET = `-- Run supabase/migrations/001_hummit_schema.sql in your Supabase SQL Editor.
 -- Creates profiles, projects, recordings, analyses, lyrics, compositions, favorites,
 -- Row Level Security policies, and private 'recordings' storage bucket.`;
 
@@ -158,7 +158,7 @@ export function SettingsView({
                 locally in your browser’s IndexedDB so nothing is lost on refresh. To enable cloud
                 persistence across devices, set <code className="font-mono">VITE_SUPABASE_URL</code>{' '}
                 and <code className="font-mono">VITE_SUPABASE_ANON_KEY</code> in your environment
-                and run <code className="font-mono">supabase/migrations/001_soundscribe_schema.sql</code>{' '}
+                and run <code className="font-mono">supabase/migrations/001_hummit_schema.sql</code>{' '}
                 in your Supabase SQL Editor.
               </p>
               <div className="flex items-center gap-2 pt-1">

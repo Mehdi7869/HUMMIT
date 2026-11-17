@@ -1,4 +1,4 @@
-import { AnalysisEngine, AnalysisMode, StructuredAudioAnalysis } from '../types/soundscribe';
+import { AnalysisEngine, AnalysisMode, StructuredAudioAnalysis } from '../types/hummit';
 import { getSupabaseClient, isSupabaseConfigured } from './supabaseClient';
 import { getExtensionFromMimeType, validateAudioBlobForAnalysis } from './audioEngine';
 
@@ -57,7 +57,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 export async function checkServerHealth(): Promise<ServerHealthResponse> {
   const res = await fetch('/api/health');
   if (!res.ok) {
-    throw new Error('Unable to reach SoundScribe server.');
+    throw new Error('Unable to reach HUMMIT server.');
   }
   return res.json();
 }

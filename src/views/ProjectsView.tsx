@@ -17,7 +17,7 @@ import {
   ProjectStatus,
   Recording,
   User,
-} from '../types/soundscribe';
+} from '../types/hummit';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { formatDuration, formatRelativeDate } from '../utils/formatters';
 

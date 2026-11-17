@@ -22,7 +22,7 @@ import {
   Project,
   Recording,
   User,
-} from '../types/soundscribe';
+} from '../types/hummit';
 import {
   CapturedAudio,
   mapMicError,
@@ -210,7 +210,7 @@ export function DashboardView({
       <section className="relative overflow-hidden rounded-xl border border-white/[0.08] bg-[#12141C]">
         <img
           src="/src/assets/images/studio_hero_backdrop_1794847607064.jpg"
-          alt="SoundScribe analog console and vocal mic"
+          alt="HUMMIT analog console and vocal mic"
           referrerPolicy="no-referrer"
           className="absolute inset-0 w-full h-full object-cover opacity-35"
         />
@@ -219,7 +219,7 @@ export function DashboardView({
         <div className="relative z-10 p-6 sm:p-8 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
           <div className="space-y-2 max-w-2xl">
             <p className="text-xs font-medium text-[#06B6D4] tracking-wide">
-              SoundScribe Studio Workspace
+              HUMMIT Studio Workspace
             </p>
             <h1 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-tight">
               Welcome back, {user.display_name}. Never lose a musical idea.

@@ -5,7 +5,7 @@ import {
   Lyrics,
   Project,
   Recording,
-} from '../types/soundscribe';
+} from '../types/hummit';
 
 export function formatDuration(seconds: number, withTenths = false): string {
   if (!Number.isFinite(seconds) || seconds < 0) return withTenths ? '00:00.0' : '00:00';

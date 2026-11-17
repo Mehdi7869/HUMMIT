@@ -2,9 +2,9 @@
 
 ### Never Lose a Musical Idea.
 
-SoundScribe is an AI-powered musical memory and composition assistant designed for musicians, singers, songwriters, and music creators. It helps capture raw musical inspiration, analyze recordings, organize creative ideas, and transform early concepts into structured compositions.
+HUMMIT is an AI-powered musical memory and composition assistant designed for musicians, singers, songwriters, and music creators. It helps capture raw musical inspiration, analyze recordings, organize creative ideas, and transform early concepts into structured compositions.
 
-Instead of losing a melody, lyric, humming session, or random voice note, SoundScribe preserves it and helps you develop it further.
+Instead of losing a melody, lyric, humming session, or random voice note, HUMMIT preserves it and helps you develop it further.
 
 ## The Problem
 
@@ -111,7 +111,7 @@ git clone YOUR_REPOSITORY_URL
 Navigate into the project:
 
 ```bash
-cd soundscribe
+cd hummit
 ```
 
 Install dependencies:
@@ -152,7 +152,7 @@ http://localhost:3000
 
 ## Project Vision
 
-SoundScribe aims to become a creative companion for musicians, helping them preserve spontaneous inspiration and turn unfinished musical ideas into meaningful compositions.
+HUMMIT aims to become a creative companion for musicians, helping them preserve spontaneous inspiration and turn unfinished musical ideas into meaningful compositions.
 
 It does not aim to replace human creativity. It aims to make sure creativity is never lost.
 

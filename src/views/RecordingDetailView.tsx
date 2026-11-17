@@ -32,7 +32,7 @@ import {
   Recording,
   StructuredAudioAnalysis,
   User,
-} from '../types/soundscribe';
+} from '../types/hummit';
 import {
   AnalysisPipelineStage,
   AnalysisProgressUpdate,
@@ -346,7 +346,7 @@ export function RecordingDetailView({
 
       setPipelineProgress({
         stage: 'saving',
-        detail: 'Saving structured analysis to your SoundScribe workspace...',
+        detail: 'Saving structured analysis to your HUMMIT workspace...',
       });
       markUpToStage('saving');
 
@@ -834,7 +834,7 @@ export function RecordingDetailView({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="font-display text-lg font-semibold text-white">
-                SoundScribe Audio Analysis Engine
+                HUMMIT Audio Analysis Engine
               </h2>
               <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-violet-500/10 text-violet-300 border border-violet-500/20">
                 Groq Whisper v3 + DSP

@@ -7,18 +7,21 @@ import {
   Project,
   Recording,
   User,
-} from '../types/soundscribe';
+} from '../types/hummit';
 import { getExtensionFromMimeType } from './audioEngine';
 import { localDb } from './localDb';
 import { getSupabaseClient, isSupabaseConfigured, ensureSupabaseConfig } from './supabaseClient';
 
 export const GUEST_USER_PREFIX = 'guest_';
-export const GUEST_SESSION_KEY = 'soundscribe_guest_user';
+export const GUEST_SESSION_KEY = 'hummit_guest_user';
+export const LEGACY_GUEST_SESSION_KEY = 'soundscribe_guest_user';
 
 export function isGuestUser(userId?: string): boolean {
   if (typeof window === 'undefined') return false;
   if (userId && userId.startsWith(GUEST_USER_PREFIX)) return true;
-  return Boolean(localStorage.getItem(GUEST_SESSION_KEY));
+  return Boolean(
+    localStorage.getItem(GUEST_SESSION_KEY) || localStorage.getItem(LEGACY_GUEST_SESSION_KEY)
+  );
 }
 
 function shouldUseSupabase(userId?: string): boolean {
@@ -64,13 +67,15 @@ export const dataService = {
   async getSessionUser(): Promise<User | null> {
     await ensureSupabaseConfig();
     if (typeof window !== 'undefined') {
-      const guestJson = localStorage.getItem(GUEST_SESSION_KEY);
+      const guestJson =
+        localStorage.getItem(GUEST_SESSION_KEY) || localStorage.getItem(LEGACY_GUEST_SESSION_KEY);
       if (guestJson) {
         try {
           const parsed = JSON.parse(guestJson) as User;
           if (parsed && parsed.id) return parsed;
         } catch {
           localStorage.removeItem(GUEST_SESSION_KEY);
+          localStorage.removeItem(LEGACY_GUEST_SESSION_KEY);
         }
       }
     }
@@ -129,7 +134,7 @@ export const dataService = {
     const guestUser: User = {
       id: guestId,
       display_name: 'Guest Musician',
-      email: 'guest@soundscribe.local',
+      email: 'guest@hummit.local',
       avatar_url: null,
       audio_preferences: {
         defaultFormat: 'audio/webm',
@@ -222,7 +227,7 @@ export const dataService = {
         ...(current || {
           id: userId,
           display_name: 'Guest Musician',
-          email: 'guest@soundscribe.local',
+          email: 'guest@hummit.local',
           avatar_url: null,
           audio_preferences: {
             defaultFormat: 'audio/webm',

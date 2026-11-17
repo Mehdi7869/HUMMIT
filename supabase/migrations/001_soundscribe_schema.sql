@@ -1,4 +1,4 @@
--- SoundScribe Complete PostgreSQL & Supabase Storage Migration
+-- HUMMIT Complete PostgreSQL & Supabase Storage Migration
 -- Run this in your Supabase SQL Editor to provision tables, indexes, RLS policies, and private audio storage.
 
 -- 1. Extensions

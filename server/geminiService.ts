@@ -4,7 +4,7 @@ import type {
   AnalysisMode,
   RecordingContentType,
   StructuredAudioAnalysis,
-} from '../src/types/soundscribe.ts';
+} from '../src/types/hummit.ts';
 
 function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -317,7 +317,7 @@ STRICT HONESTY RULES:
       },
       config: {
         systemInstruction:
-          'You are SoundScribe Audio Analysis Engine. You perform rigorous, truthful analysis of humming, singing, speech, and instrumental recordings. Never fabricate lyrics, exact BPM, key signatures, or musical notes when unmeasurable.',
+          'You are HUMMIT Audio Analysis Engine. You perform rigorous, truthful analysis of humming, singing, speech, and instrumental recordings. Never fabricate lyrics, exact BPM, key signatures, or musical notes when unmeasurable.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -625,7 +625,7 @@ Requirements:
       contents: { parts },
       config: {
         systemInstruction:
-          'You are SoundScribe Composition Architect, a veteran producer and songwriter helping an independent musician expand a raw sketch into a cohesive arrangement. Respect the artist’s voice and offer concrete, musical, playable ideas.',
+          'You are HUMMIT Composition Architect, a veteran producer and songwriter helping an independent musician expand a raw sketch into a cohesive arrangement. Respect the artist’s voice and offer concrete, musical, playable ideas.',
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -793,7 +793,7 @@ export async function chatMusicAssistantWithGemini(params: {
       contents: prompt,
       config: {
         systemInstruction:
-          'You are SoundScribe AI Music Assistant, an insightful studio producer, arranger, and songwriting partner. Give concrete, musical, grounded advice (chord voicings, rhythmic feels, lyric phrasing, arrangement dynamics, and production ideas). Keep formatting clean and scannable.',
+          'You are HUMMIT AI Music Assistant, an insightful studio producer, arranger, and songwriting partner. Give concrete, musical, grounded advice (chord voicings, rhythmic feels, lyric phrasing, arrangement dynamics, and production ideas). Keep formatting clean and scannable.',
       },
     })
   );
